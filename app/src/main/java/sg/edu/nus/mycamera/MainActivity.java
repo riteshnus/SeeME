@@ -87,7 +87,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             @Override
             public void onInfo(MediaRecorder mr, int what, int extra) {
                 if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED) {
-                    Log.v("VIDEOCAPTURE","Maximum Duration Reached");
+                    Log.i("VIDEOCAPTURE","Maximum Duration Reached");
                     recorder.stop();
                     recorder.reset();
                     UploadCloud();
@@ -211,7 +211,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     public void UploadCloud(){
         String path0 = "video-api";
         AsyncTaskRunner asyncTaskRunner=new AsyncTaskRunner();
-        Log.v("file",mFileName);
+        Log.i("file",mFileName);
         asyncTaskRunner.execute(path0,mFileName);
     }
 
@@ -236,7 +236,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         protected void onPostExecute(String response) {
             if (response != null) {
                 String fileName = response.split("o/")[1];
-                Log.v(LOG_TAG,response+", fileName:"+fileName);
+                Log.i(LOG_TAG,response+", fileName:"+fileName);
                 AsyncTaskRunnerForAPI asyncTaskRunnerForAPI = new AsyncTaskRunnerForAPI();
                 asyncTaskRunnerForAPI.execute(Constant.postUrl+Constant.apiKey,fileName);
                 //Toast.makeText(MainActivity.this, "Choose Countries :", Toast.LENGTH_SHORT).show();

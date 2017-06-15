@@ -21,6 +21,7 @@ import java.nio.charset.Charset;
  */
 
 public class ApiCall {
+    String LOG_TAG = ApiCall.class.getName();
     public static String callHttpConnection(String url,String FileName){
         String jsonResponse = "";
         String nameOfRegion = "";
@@ -29,10 +30,12 @@ public class ApiCall {
         HttpURLConnection urlConnection = null;
         InputStream inputStream = null;
         DataOutputStream outputStream = null;
+
         try {
             newUrl = new URL(url);
             if (newUrl == null)
                 return jsonResponse;
+            Log.i("API_Call",fileName);
             urlConnection = (HttpURLConnection) newUrl.openConnection();
             urlConnection.setRequestMethod("POST");
             urlConnection.setRequestProperty("Content-Type","application/json");
@@ -47,7 +50,7 @@ public class ApiCall {
             if(urlConnection.getResponseCode()==200){
                 inputStream = urlConnection.getInputStream();
                 jsonResponse = readFromStream(inputStream);
-                Log.v("post response",jsonResponse);
+                Log.i("post response",jsonResponse);
                 JSONObject resJson = new JSONObject(jsonResponse);
                 nameOfRegion = resJson.getString("name");
                 callHttpGetRequest(nameOfRegion);
@@ -79,16 +82,17 @@ public class ApiCall {
     }
 
     public static String callHttpGetRequest(String region){
-        Log.v("region",region);
+        Log.i("region",region);
         String jsonResponse = "";
         URL newUrl = null;
-        String url1 = "https://videointelligence.googleapis.com/v1/operations/asia-east1.3736972764404527650?key=AIzaSyBTjFmHan4EGktatA8E8718xMinYKNg18M"; //Constant.getUrl.trim()+region.trim()+"?key="+Constant.apiKey.trim();
-        Log.v("url",url1);
+        //String url1 = "https://videointelligence.googleapis.com/v1/operations/asia-east1.3736972764404527650?key=AIzaSyBTjFmHan4EGktatA8E8718xMinYKNg18M";
+        String url1 = Constant.getUrl.trim()+region.trim()+"?key="+Constant.apiKey.trim();
+        Log.i("url",url1);
         HttpURLConnection urlConnection = null;
         InputStream inputStream = null;
         try {
             newUrl = new URL(url1.toString().trim());
-            Log.v("get url",newUrl.toString());
+            Log.i("get url",newUrl.toString());
             if (newUrl == null)
                 return jsonResponse;
             urlConnection = (HttpURLConnection) newUrl.openConnection();
@@ -98,7 +102,7 @@ public class ApiCall {
             if(urlConnection.getResponseCode()==200){
                 inputStream = urlConnection.getInputStream();
                 jsonResponse = readFromStream(inputStream);
-                Log.v("get response",jsonResponse);
+                Log.i("get response",jsonResponse);
             }
         } catch (MalformedURLException e) {
             e.printStackTrace();

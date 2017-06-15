@@ -31,7 +31,7 @@ public class UploadFile {
     static Storage storage = null;
     public static InputStream inputStreamStatic;
     public static String uploadFile(String bucketName, String filePath, InputStream inputStream)throws Exception {
-        Log.v("here",bucketName+":"+filePath);
+        Log.i("here",bucketName+":"+filePath);
         inputStreamStatic = inputStream;
         Storage storage = getStorage();
         StorageObject object = new StorageObject();
@@ -50,7 +50,6 @@ public class UploadFile {
             insert.setPredefinedAcl("publicread");
             //insert.set
             StorageObject obj = insert.execute();
-            Log.d("link of upload", obj.getSelfLink());
             return obj.getSelfLink();
         } finally {
             stream.close();
