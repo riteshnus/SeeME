@@ -13,7 +13,6 @@ import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
-import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Toast;
@@ -26,7 +25,7 @@ import java.util.Calendar;
 import static android.os.Environment.getExternalStorageDirectory;
 
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener, SurfaceHolder.Callback{
+public class MainActivity extends AppCompatActivity implements SurfaceHolder.Callback{
 
     CameraManager mCmanager;
     static final int REQUEST_VIDEO_CAPTURE = 1;
@@ -63,8 +62,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         holder.addCallback(this);
         holder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
 
-        cameraView.setClickable(true);
-        cameraView.setOnClickListener(this);
+        //cameraView.setClickable(true);
+        //cameraView.setOnClickListener(this);
 
     }
 
@@ -114,7 +113,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-    public void onClick(View v) {
+    /*public void onClick(View v) {
         if (recording) {
             recorder.stop();
             recording = false;
@@ -127,7 +126,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             recording = true;
             recorder.start();
         }
-    }
+    }*/
 
     public void surfaceCreated(SurfaceHolder holder) {
         initRecorder();
@@ -166,14 +165,18 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     @Override
+    public void onBackPressed() {
+        super.onBackPressed();
+        if (recorder != null) {
+            recorder.release();
+            recorder = null;
+        }
+    }
+
+    @Override
     protected void onStop() {
         // call the superclass method first
         super.onStop();
-
-        if (recorder != null) {
-            //recorder.release();
-            //recorder = null;
-        }
     }
 
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
@@ -260,7 +263,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         @Override
         protected void onPostExecute(String response) {
             if (response != null) {
-                Toast.makeText(MainActivity.this, "Choose Countries :", Toast.LENGTH_SHORT).show();
+                Toast.makeText(MainActivity.this, "Response got from api :", Toast.LENGTH_SHORT).show();
             }else{
                 Toast.makeText(MainActivity.this, "No Record Found", Toast.LENGTH_SHORT).show();
             }
