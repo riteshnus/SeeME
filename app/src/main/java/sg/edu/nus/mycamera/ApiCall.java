@@ -53,7 +53,7 @@ public class ApiCall {
                 Log.i("post response",jsonResponse);
                 JSONObject resJson = new JSONObject(jsonResponse);
                 nameOfRegion = resJson.getString("name");
-                callHttpGetRequest(nameOfRegion);
+                jsonResponse=callHttpGetRequest(nameOfRegion);
             }
         } catch (MalformedURLException e) {
             e.printStackTrace();
@@ -83,15 +83,17 @@ public class ApiCall {
 
     public static String callHttpGetRequest(String region){
         Log.i("region",region);
+        region = "asia-east1.574906563948313063";
         String jsonResponse = "";
         URL newUrl = null;
-        //String url1 = "https://videointelligence.googleapis.com/v1/operations/asia-east1.3736972764404527650?key=AIzaSyBTjFmHan4EGktatA8E8718xMinYKNg18M";
-        String url1 = Constant.getUrl.trim()+region.trim()+"?key="+Constant.apiKey.trim();
+        String url1 = "https://videointelligence.googleapis.com/v1/operations/asia-east1.574906563948313063?key=AIzaSyBTjFmHan4EGktatA8E8718xMinYKNg18M";
+        String url2 = Constant.getUrl.trim()+region.trim()+"?key="+Constant.apiKey.trim();
+        Log.i("url2",url2);
         Log.i("url",url1);
         HttpURLConnection urlConnection = null;
         InputStream inputStream = null;
         try {
-            newUrl = new URL(url1.toString().trim());
+            newUrl = new URL(url2.toString().trim());
             Log.i("get url",newUrl.toString());
             if (newUrl == null)
                 return jsonResponse;

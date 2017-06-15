@@ -31,7 +31,7 @@ public class UploadFile {
     static Storage storage = null;
     public static InputStream inputStreamStatic;
     public static String uploadFile(String bucketName, String filePath, InputStream inputStream)throws Exception {
-        Log.i("here",bucketName+":"+filePath);
+        Log.i("BucketName: ",bucketName+", filename:"+filePath);
         inputStreamStatic = inputStream;
         Storage storage = getStorage();
         StorageObject object = new StorageObject();
@@ -47,6 +47,7 @@ public class UploadFile {
 
             Storage.Objects.Insert insert = storage.objects().insert(bucketName, null, content);
             insert.setName(file.getName());
+            insert.setContentEncoding("media");
             insert.setPredefinedAcl("publicread");
             //insert.set
             StorageObject obj = insert.execute();
