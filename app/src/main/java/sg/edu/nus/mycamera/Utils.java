@@ -1,4 +1,4 @@
-package sg.edu.nus.seemee;
+package sg.edu.nus.mycamera;
 
 import android.util.Log;
 
@@ -20,8 +20,10 @@ public class Utils {
         List<String> descriptionList = new ArrayList<>();
         try {
             Thread.sleep(2000);
+            Log.d(LOG_TAG,objectJSON);
             JSONObject baseJsonResponse = new JSONObject(objectJSON);
             JSONObject responseObject = baseJsonResponse.getJSONObject("response");
+            Log.d(LOG_TAG,objectJSON);
             if(responseObject.has("annotationResults")) {
                 JSONArray annotationArray = responseObject.getJSONArray("annotationResults");
 

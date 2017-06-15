@@ -22,11 +22,11 @@ import java.nio.charset.Charset;
 
 public class ApiCall {
     String LOG_TAG = ApiCall.class.getName();
-    public static String callHttpConnection(String url,String FileName){
+    public static String callHttpConnection(String url,String fileName){
         String jsonResponse = "";
         String nameOfRegion = "";
         URL newUrl = null;
-        String fileName = "gs://video-api/"+FileName;
+        fileName = "gs://video-api/"+fileName;
         HttpURLConnection urlConnection = null;
         InputStream inputStream = null;
         DataOutputStream outputStream = null;

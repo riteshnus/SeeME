@@ -1,8 +1,8 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 25
-    buildToolsVersion "25.0.2"
+    compileSdkVersion 24
+    buildToolsVersion "24.0.1"
     defaultConfig {
         applicationId "sg.edu.nus.mycamera"
         minSdkVersion 21
@@ -28,11 +28,12 @@ dependencies {
     androidTestCompile('com.android.support.test.espresso:espresso-core:2.2.2', {
         exclude group: 'com.android.support', module: 'support-annotations'
     })
-    compile 'com.android.support:appcompat-v7:25.3.1'
+    compile 'com.android.support:appcompat-v7:24.2.0'
     compile 'com.wu-man:android-oauth-client:0.0.3'
     compile 'com.google.apis:google-api-services-storage:v1-rev17-1.19.0'
     compile(group: 'com.google.api-client', name: 'google-api-client', version:'1.19.0'){
         exclude(group: 'com.google.guava', module: 'guava-jdk5')
     }
+    compile'com.amazonaws:aws-android-sdk-polly:2.3.4'
     testCompile 'junit:junit:4.12'
 }
