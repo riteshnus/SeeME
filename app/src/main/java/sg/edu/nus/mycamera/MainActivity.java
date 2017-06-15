@@ -97,7 +97,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         Calendar calendar=Calendar.getInstance();
         String timeInMillis = String.valueOf(calendar.getTimeInMillis());
         mFileName  =  getExternalStorageDirectory().getAbsolutePath();
-        mFileName += "/"+timeInMillis+".mp4";
+        mFileName += "/seeMe/"+timeInMillis+".mp4";
         recorder.setOutputFile(mFileName);
         recorder.setMaxDuration(15000); // 15 seconds
         //recorder.setMaxFileSize(5000000); // Approximately 5 megabytes
@@ -190,13 +190,15 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         if (recorder != null) {
             recorder.release();
             recorder = null;
-            mediaPlayer.release();
+            //mediaPlayer.release();
+            mediaPlayer.reset();
             mediaPlayer = null;
         }
         else if(mediaPlayer != null){
             recorder.release();
             recorder = null;
-            mediaPlayer.release();
+            //mediaPlayer.release();
+            mediaPlayer.reset();
             mediaPlayer = null;
         }
     }
@@ -345,10 +347,10 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
             Log.i(LOG_TAG, "Playing speech from presigned URL: " + presignedSynthesizeSpeechUrl);
 
             // Create a media player to play the synthesized audio stream.
-            if (mediaPlayer.isPlaying()) {
+            /*if (!mediaPlayer.isPlaying()) {
                 setupNewMediaPlayer();
-            }
-            mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+            }*/
+            //mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
 
             try {
                 // Set media player's data source to previously obtained URL.
@@ -370,8 +372,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
             mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
                 @Override
                 public void onCompletion(MediaPlayer mp) {
-                    mp.release();
-
+                    mp.reset();
                 }
             });
         }
@@ -379,6 +380,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
 
     void setupNewMediaPlayer() {
         mediaPlayer = new MediaPlayer();
+        mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
         mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
             @Override
             public void onCompletion(MediaPlayer mp) {

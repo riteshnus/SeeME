@@ -19,7 +19,7 @@ public class Utils {
 
         List<String> descriptionList = new ArrayList<>();
         try {
-            Thread.sleep(2000);
+            //Thread.sleep(2000);
             JSONObject baseJsonResponse = new JSONObject(objectJSON);
             JSONObject responseObject = baseJsonResponse.getJSONObject("response");
             if(responseObject.has("annotationResults")) {
@@ -45,9 +45,9 @@ public class Utils {
 
         } catch (JSONException e) {
             Log.e(LOG_TAG, "Problem parsing the earthquake JSON results", e);
-        } catch (InterruptedException e) {
+        } /*catch (InterruptedException e) {
             e.printStackTrace();
-        }
+        }*/
         return descriptionList;
     }
 }
