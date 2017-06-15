@@ -1,5 +1,6 @@
 package sg.edu.nus.mycamera;
 
+import android.Manifest;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.hardware.camera2.CameraManager;
@@ -10,7 +11,10 @@ import android.media.MediaRecorder;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.Settings;
 import android.support.annotation.NonNull;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.SurfaceHolder;
@@ -20,7 +24,9 @@ import android.view.WindowManager;
 import android.widget.Toast;
 
 import com.amazonaws.auth.CognitoCachingCredentialsProvider;
+import com.amazonaws.mobileconnectors.dynamodbv2.dynamodbmapper.DynamoDBMapper;
 import com.amazonaws.regions.Regions;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
 import com.amazonaws.services.polly.AmazonPollyPresigningClient;
 import com.amazonaws.services.polly.model.OutputFormat;
 import com.amazonaws.services.polly.model.SynthesizeSpeechPresignRequest;
@@ -31,6 +37,8 @@ import java.io.InputStream;
 import java.net.URL;
 import java.util.Calendar;
 import java.util.List;
+
+import sg.edu.nus.mycamera.dto.SeeMeObjects;
 
 import static android.os.Environment.getExternalStorageDirectory;
 
@@ -49,7 +57,8 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
     private boolean permissionToRecordAccepted = false;
     private boolean permissionToWriteAccepted = false;
     private boolean permissionTORecordVideo = false;
-    private String [] permissions = {"android.permission.RECORD_AUDIO", "android.permission.WRITE_EXTERNAL_STORAGE","android.permission.CAMERA"};
+    private boolean permissionTOAccessFineLoacation = false;
+    private boolean permissionToAccessCoarseLocation=false;
     private String LOG_TAG = MainActivity.class.getName();
     private String textToRead;
     private MediaPlayer mediaPlayer;
@@ -57,7 +66,15 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
     private static final Regions MY_REGION = Regions.US_EAST_1;
     private AmazonPollyPresigningClient client;
     private CognitoCachingCredentialsProvider credentialsProvider;
+    private String android_id;
+    AsyncTaskRunner asyncTaskRunner;
+    AsyncTaskRunnerForAPI asyncTaskRunnerForAPI;
+    PlaySpeech playSpeech;
+    static File saveDir = null;
     private static final String COGNITO_POOL_ID = "us-east-1:7d6bf1bc-6f56-4ec5-8a36-7aaa48fec991";
+    private AmazonDynamoDBClient ddbClient;
+    private DynamoDBMapper mapper;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -71,7 +88,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         recorder = new MediaRecorder();
         int requestCode = 200;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            requestPermissions(permissions, requestCode);
+            requestPermissions(Constant.permissions, requestCode);
         }
 
         setContentView(R.layout.activity_main);
@@ -80,8 +97,10 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         holder = cameraView.getHolder();
         holder.addCallback(this);
         holder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
-        initPollyClient();
+        initAmazonServices();
         setupNewMediaPlayer();
+        android_id = Settings.Secure.getString(this.getContentResolver(),
+                Settings.Secure.ANDROID_ID);
         //cameraView.setClickable(true);
         //cameraView.setOnClickListener(this);
 
@@ -96,10 +115,15 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         recorder.setProfile(cpHigh);
         Calendar calendar=Calendar.getInstance();
         String timeInMillis = String.valueOf(calendar.getTimeInMillis());
+        // creating dir for temp storage of videos
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+            saveDir = new File(Environment.getExternalStorageDirectory(), "seeMe");
+            saveDir.mkdirs();
+        }
         mFileName  =  getExternalStorageDirectory().getAbsolutePath();
         mFileName += "/seeMe/"+timeInMillis+".mp4";
         recorder.setOutputFile(mFileName);
-        recorder.setMaxDuration(15000); // 15 seconds
+        recorder.setMaxDuration(10000); // 15 seconds
         //recorder.setMaxFileSize(5000000); // Approximately 5 megabytes
         recorder.setOrientationHint(180);
         recorder.setOnInfoListener(new MediaRecorder.OnInfoListener() {
@@ -133,21 +157,6 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         }
     }
 
-    /*public void onClick(View v) {
-        if (recording) {
-            recorder.stop();
-            recording = false;
-
-            // Let's initRecorder so we can record again
-            recorder.reset();
-            initRecorder();
-            prepareRecorder();
-        } else {
-            recording = true;
-            recorder.start();
-        }
-    }*/
-
     public void surfaceCreated(SurfaceHolder holder) {
         initRecorder();
         prepareRecorder();
@@ -161,7 +170,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
 
     public void surfaceDestroyed(SurfaceHolder holder) {
         if (recording) {
-            recorder.stop();
+            if (recorder != null) recorder.stop();
             recording = false;
         }
         if (recorder != null) {
@@ -184,22 +193,28 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         }
     }
 
+    // code to delete any file / directory
+    void deleteRecursive(File fileOrDirectory) {
+        if (fileOrDirectory.isDirectory())
+            for (File child : fileOrDirectory.listFiles())
+                deleteRecursive(child);
+
+        fileOrDirectory.delete();
+    }
+
     @Override
     public void onBackPressed() {
         super.onBackPressed();
-        if (recorder != null) {
+        if (recorder != null || mediaPlayer !=null) {
             recorder.release();
             recorder = null;
             //mediaPlayer.release();
+            if (asyncTaskRunner != null) asyncTaskRunner.cancel(true);
+            if (asyncTaskRunnerForAPI != null) asyncTaskRunnerForAPI.cancel(true);
+            if (playSpeech != null) playSpeech.cancel(true);
             mediaPlayer.reset();
             mediaPlayer = null;
-        }
-        else if(mediaPlayer != null){
-            recorder.release();
-            recorder = null;
-            //mediaPlayer.release();
-            mediaPlayer.reset();
-            mediaPlayer = null;
+            if(saveDir != null) deleteRecursive(saveDir);
         }
     }
 
@@ -216,6 +231,8 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
                 permissionToRecordAccepted  = grantResults[0] == PackageManager.PERMISSION_GRANTED;
                 permissionToWriteAccepted  = grantResults[1] == PackageManager.PERMISSION_GRANTED;
                 permissionTORecordVideo = grantResults[2] == PackageManager.PERMISSION_GRANTED;
+                permissionTOAccessFineLoacation = grantResults[3] == PackageManager.PERMISSION_GRANTED;
+                permissionToAccessCoarseLocation = grantResults[4] == PackageManager.PERMISSION_GRANTED;
                 break;
         }
         if (!permissionToRecordAccepted ) MainActivity.super.finish();
@@ -224,30 +241,17 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         if (!permissionTORecordVideo ){
             Log.e("Recorder ", "PermissionNotPresent");
             MainActivity.super.finish();}
+        if (!permissionTOAccessFineLoacation ) MainActivity.super.finish();
+        if (!permissionTOAccessFineLoacation ) MainActivity.super.finish();
     }
-
-/*    @Override
-    public void onInfo(MediaRecorder mr, int what, int extra) {
-        if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED) {
-            Log.v("VIDEOCAPTURE","Maximum Duration Reached");
-            recorder.stop();
-            recorder.reset();
-            recording = false;
-            initRecorder();
-            prepareRecorder();
-            recorder.start();
-            UploadCloud();
-        }
-        //Toast.makeText(MainActivity.this, "Again",Toast.LENGTH_LONG).show();
-    }*/
 
     public void UploadCloud(){
         String path0 = "video-api";
-        AsyncTaskRunner asyncTaskRunner=new AsyncTaskRunner();
+        asyncTaskRunner=new AsyncTaskRunner();
         asyncTaskRunner.execute(path0,mFileName);
     }
 
-    void initPollyClient() {
+    void initAmazonServices() {
         // Initialize the Amazon Cognito credentials provider.
         credentialsProvider = new CognitoCachingCredentialsProvider(
                 getApplicationContext(),
@@ -257,6 +261,8 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
 
         // Create a client that supports generation of presigned URLs.
         client = new AmazonPollyPresigningClient(credentialsProvider);
+        ddbClient = new AmazonDynamoDBClient(credentialsProvider);
+        mapper = new DynamoDBMapper(ddbClient);
     }
 
     private class AsyncTaskRunner extends AsyncTask<String, String, String> {
@@ -281,7 +287,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
             if (response != null) {
                 String fileName = response.split("o/")[1];
                 Log.i(LOG_TAG,response+", fileName:"+fileName+", files uploaded-"+ (noOfFilesUpload+1));
-                AsyncTaskRunnerForAPI asyncTaskRunnerForAPI = new AsyncTaskRunnerForAPI();
+                asyncTaskRunnerForAPI = new AsyncTaskRunnerForAPI();
                 asyncTaskRunnerForAPI.execute(Constant.postUrl+Constant.apiKey,fileName);
                 //Toast.makeText(MainActivity.this, "Choose Countries :", Toast.LENGTH_SHORT).show();
             }else{
@@ -303,7 +309,10 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
 
         @Override
         protected void onPostExecute(String response) {
-            List<String> textsToRead = Utils.extractDataFromJSON(response);
+            Log.i(LOG_TAG,response);
+            SeeMeObjects seeMeeObject = Utils.createSeeMeObject(MainActivity.this,response);
+            seeMeeObject.setId(android_id);
+            List<String> textsToRead = seeMeeObject.getObjectDescription();
             if(!textsToRead.isEmpty()) {
                 StringBuffer buffer = new StringBuffer();
                 buffer.append("There is");
@@ -316,14 +325,15 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
             }
 
             Toast.makeText(MainActivity.this,textToRead,Toast.LENGTH_SHORT).show();
-            new PlaySpeech().execute();
+            playSpeech = new PlaySpeech();
+            playSpeech.execute(seeMeeObject);
         }
     }
 
-    private class PlaySpeech extends AsyncTask<Void,Void,Void> {
+    private class PlaySpeech extends AsyncTask<SeeMeObjects,Void,Void> {
 
         @Override
-        protected Void doInBackground(Void... params) {
+        protected Void doInBackground(SeeMeObjects... params) {
             // Create speech synthesis request.
             SynthesizeSpeechPresignRequest synthesizeSpeechPresignRequest =
                     new SynthesizeSpeechPresignRequest()
@@ -337,6 +347,9 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
             // Get the presigned URL for synthesized speech audio stream.
             presignedSynthesizeSpeechUrl =
                     client.getPresignedSynthesizeSpeechUrl(synthesizeSpeechPresignRequest);
+            if(!params[0].getObjectDescription().isEmpty()) {
+                mapper.save(params[0]);
+            }
             return null;
         }
 
@@ -402,300 +415,4 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
             }
         });
     }
-
-
-/*
-    public boolean prepareVideoRecorder(){
-         mCmanager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-
-        // Use the same size for recording profile.
-
-        mMediaRecorder = new MediaRecorder();
-        mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-        mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
-        mMediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
-        mMediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
-        mOutputFile=CameraHelper.getOutputMediaFile(CameraHelper.MEDIA_TYPE_VIDEO);
-        mMediaRecorder.setOutputFile(mOutputFile.getPath());
-        try {
-            mMediaRecorder.prepare();
-        } catch (IllegalStateException e) {
-            Log.d(TAG, "IllegalStateException preparing MediaRecorder: " + e.getMessage());
-            releaseMediaRecorder();
-            return false;
-        } catch (IOException e) {
-            Log.d(TAG, "IOException preparing MediaRecorder: " + e.getMessage());
-            releaseMediaRecorder();
-            return false;
-        }
-        return true;
-    }
-
-    *//**
-     * Asynchronous task for preparing the {@link android.media.MediaRecorder} since it's a long blocking
-     * operation.
-     *//*
-    class MediaPrepareTask extends AsyncTask<Void, Void, Boolean> {
-
-        @Override
-        protected Boolean doInBackground(Void... voids) {
-            // initialize video camera
-            if (prepareVideoRecorder()) {
-                // Camera is available and unlocked, MediaRecorder is prepared,
-                // now you can start recording
-                mMediaRecorder.start();
-
-                isRecording = true;
-            } else {
-                // prepare didn't work, release the camera
-                releaseMediaRecorder();
-                return false;
-            }
-            return true;
-        }
-
-        @Override
-        protected void onPostExecute(Boolean result) {
-            if (!result) {
-                MainActivity.this.finish();
-            }
-            // inform the user that recording has started
-
-
-        }
-    }
-
-    private void releaseMediaRecorder(){
-        if (mMediaRecorder != null) {
-            // clear recorder configuration
-            mMediaRecorder.reset();
-            // release the recorder object
-            mMediaRecorder.release();
-            mMediaRecorder = null;
-            // Lock camera for later use i.e taking it back from MediaRecorder.
-            // MediaRecorder doesn't need it anymore and we will release it if the activity pauses.
-
-        }
-    }
-
-    TextureView.SurfaceTextureListener textureListener = new TextureView.SurfaceTextureListener() {
-        @Override
-        public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
-            //open your camera here
-            openCamera();
-        }
-        @Override
-        public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
-            // Transform you image captured size according to the surface width and height
-        }
-        @Override
-        public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
-            return false;
-        }
-        @Override
-        public void onSurfaceTextureUpdated(SurfaceTexture surface) {
-        }
-    };
-
-    private final CameraDevice.StateCallback stateCallback = new CameraDevice.StateCallback() {
-        @Override
-        public void onOpened(CameraDevice camera) {
-            //This is called when the camera is open
-            Log.e(TAG, "onOpened");
-            cameraDevice = camera;
-            createCameraPreview();
-        }
-        @Override
-        public void onDisconnected(CameraDevice camera) {
-            cameraDevice.close();
-        }
-        @Override
-        public void onError(CameraDevice camera, int error) {
-            cameraDevice.close();
-            cameraDevice = null;
-        }
-    };
-
-    final CameraCaptureSession.CaptureCallback captureCallbackListener = new CameraCaptureSession.CaptureCallback() {
-        @Override
-        public void onCaptureCompleted(CameraCaptureSession session, CaptureRequest request, TotalCaptureResult result) {
-            super.onCaptureCompleted(session, request, result);
-            Toast.makeText(MainActivity.this, "Saved:" + file, Toast.LENGTH_SHORT).show();
-            createCameraPreview();
-        }
-    };
-    protected void startBackgroundThread() {
-        mBackgroundThread = new HandlerThread("Camera Background");
-        mBackgroundThread.start();
-        mBackgroundHandler = new Handler(mBackgroundThread.getLooper());
-    }
-    protected void stopBackgroundThread() {
-        mBackgroundThread.quitSafely();
-        try {
-            mBackgroundThread.join();
-            mBackgroundThread = null;
-            mBackgroundHandler = null;
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-    }
-
-    protected void takePicture() {
-        if(null == cameraDevice) {
-            Log.e(TAG, "cameraDevice is null");
-            return;
-        }
-        CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-        try {
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraDevice.getId());
-            Size[] jpegSizes = null;
-            if (characteristics != null) {
-                jpegSizes = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.JPEG);
-            }
-            int width = 640;
-            int height = 480;
-            if (jpegSizes != null && 0 < jpegSizes.length) {
-                width = jpegSizes[0].getWidth();
-                height = jpegSizes[0].getHeight();
-            }
-            ImageReader reader = ImageReader.newInstance(width, height, ImageFormat.JPEG, 1);
-            List<Surface> outputSurfaces = new ArrayList<Surface>(2);
-            outputSurfaces.add(reader.getSurface());
-            outputSurfaces.add(new Surface(mPreview.getSurfaceTexture()));
-            final CaptureRequest.Builder captureBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-            captureBuilder.addTarget(reader.getSurface());
-            captureBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
-            // Orientation
-            int rotation = getWindowManager().getDefaultDisplay().getRotation();
-            captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, ORIENTATIONS.get(rotation));
-            final File file = new File(Environment.getExternalStorageDirectory()+"/pic.jpg");
-            ImageReader.OnImageAvailableListener readerListener = new ImageReader.OnImageAvailableListener() {
-                @Override
-                public void onImageAvailable(ImageReader reader) {
-                    Image image = null;
-                    try {
-                        image = reader.acquireLatestImage();
-                        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-                        byte[] bytes = new byte[buffer.capacity()];
-                        buffer.get(bytes);
-                        save(bytes);
-                    } catch (FileNotFoundException e) {
-                        e.printStackTrace();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    } finally {
-                        if (image != null) {
-                            image.close();
-                        }
-                    }
-                }
-                private void save(byte[] bytes) throws IOException {
-                    OutputStream output = null;
-                    try {
-                        output = new FileOutputStream(mOutputFile);
-                        output.write(bytes);
-                    } finally {
-                        if (null != output) {
-                            output.close();
-                        }
-                    }
-                }
-            };
-            reader.setOnImageAvailableListener(readerListener, mBackgroundHandler);
-            final CameraCaptureSession.CaptureCallback captureListener = new CameraCaptureSession.CaptureCallback() {
-                @Override
-                public void onCaptureCompleted(CameraCaptureSession session, CaptureRequest request, TotalCaptureResult result) {
-                    super.onCaptureCompleted(session, request, result);
-                    Toast.makeText(MainActivity.this, "Saved:" + file, Toast.LENGTH_SHORT).show();
-                    createCameraPreview();
-                }
-            };
-            cameraDevice.createCaptureSession(outputSurfaces, new CameraCaptureSession.StateCallback() {
-                @Override
-                public void onConfigured(CameraCaptureSession session) {
-                    try {
-                        session.capture(captureBuilder.build(), captureListener, mBackgroundHandler);
-                    } catch (CameraAccessException e) {
-                        e.printStackTrace();
-                    }
-                }
-                @Override
-                public void onConfigureFailed(CameraCaptureSession session) {
-                }
-            }, mBackgroundHandler);
-        } catch (CameraAccessException e) {
-            e.printStackTrace();
-        }
-    }
-    protected void createCameraPreview() {
-        try {
-            SurfaceTexture texture = mPreview.getSurfaceTexture();
-            assert texture != null;
-            texture.setDefaultBufferSize(imageDimension.getWidth(), imageDimension.getHeight());
-            Surface surface = new Surface(texture);
-            captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-            captureRequestBuilder.addTarget(surface);
-            cameraDevice.createCaptureSession(Arrays.asList(surface), new CameraCaptureSession.StateCallback(){
-                @Override
-                public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
-                    //The camera is already closed
-                    if (null == cameraDevice) {
-                        return;
-                    }
-                    // When the session is ready, we start displaying the preview.
-                    cameraCaptureSessions = cameraCaptureSession;
-                   // updatePreview();
-                }
-                @Override
-                public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
-                    Toast.makeText(MainActivity.this, "Configuration change", Toast.LENGTH_SHORT).show();
-                }
-            }, null);
-        } catch (CameraAccessException e) {
-            e.printStackTrace();
-        }
-    }
-    private void openCamera() {
-        CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-        Log.e(TAG, "is camera open");
-        try {
-            Log.i(TAG, "Camera present in devices " + manager.getCameraIdList());
-            cameraId = manager.getCameraIdList()[0];
-            Log.e(TAG, "Camera Id is " + cameraId);
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
-            StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-            assert map != null;
-            imageDimension = map.getOutputSizes(SurfaceTexture.class)[0];
-            // Add permission for camera and let user grant the permission
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQUEST_CAMERA_PERMISSION);
-                return;
-            }
-            manager.openCamera(cameraId, stateCallback, null);
-        } catch (CameraAccessException e) {
-            e.printStackTrace();
-        }
-        Log.e(TAG, "openCamera X");
-    }
-    *//*protected void updatePreview() {
-        if(null == cameraDevice) {
-            Log.e(TAG, "updatePreview error, return");
-        }
-        captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
-        try {
-            cameraCaptureSessions.setRepeatingRequest(captureRequestBuilder.build(), null, mBackgroundHandler);
-        } catch (CameraAccessException e) {
-            e.printStackTrace();
-        }
-    }*//*
-    private void closeCamera() {
-        if (null != cameraDevice) {
-            cameraDevice.close();
-            cameraDevice = null;
-        }
-        if (null != imageReader) {
-            imageReader.close();
-            imageReader = null;
-        }
-    }*/
 }
