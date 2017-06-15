@@ -1,5 +1,6 @@
 package sg.edu.nus.mycamera;
 
+import android.Manifest;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.hardware.camera2.CameraManager;
@@ -10,7 +11,9 @@ import android.media.MediaRecorder;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.support.annotation.NonNull;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.SurfaceHolder;
@@ -58,10 +61,13 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
     private AmazonPollyPresigningClient client;
     private CognitoCachingCredentialsProvider credentialsProvider;
     private static final String COGNITO_POOL_ID = "us-east-1:7d6bf1bc-6f56-4ec5-8a36-7aaa48fec991";
+
+    static File saveDir = null;
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+
         requestWindowFeature(Window.FEATURE_NO_TITLE);
+        super.onCreate(savedInstanceState);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
@@ -96,6 +102,13 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         recorder.setProfile(cpHigh);
         Calendar calendar=Calendar.getInstance();
         String timeInMillis = String.valueOf(calendar.getTimeInMillis());
+
+        // creating dir for temp storage of videos
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+            saveDir = new File(Environment.getExternalStorageDirectory(), "seeMe");
+            saveDir.mkdirs();
+        }
+
         mFileName  =  getExternalStorageDirectory().getAbsolutePath();
         mFileName += "/seeMe/"+timeInMillis+".mp4";
         recorder.setOutputFile(mFileName);
@@ -161,7 +174,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
 
     public void surfaceDestroyed(SurfaceHolder holder) {
         if (recording) {
-            recorder.stop();
+            if (recorder != null) recorder.stop();
             recording = false;
         }
         if (recorder != null) {
@@ -184,22 +197,26 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         }
     }
 
+    // code to delete any file / directory
+    void deleteRecursive(File fileOrDirectory) {
+        if (fileOrDirectory.isDirectory())
+            for (File child : fileOrDirectory.listFiles())
+                deleteRecursive(child);
+
+        fileOrDirectory.delete();
+    }
+
     @Override
     public void onBackPressed() {
         super.onBackPressed();
-        if (recorder != null) {
+
+        if (recorder != null && mediaPlayer != null) {
             recorder.release();
             recorder = null;
             //mediaPlayer.release();
             mediaPlayer.reset();
             mediaPlayer = null;
-        }
-        else if(mediaPlayer != null){
-            recorder.release();
-            recorder = null;
-            //mediaPlayer.release();
-            mediaPlayer.reset();
-            mediaPlayer = null;
+            if(saveDir != null) deleteRecursive(saveDir);
         }
     }
 
