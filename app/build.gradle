@@ -36,4 +36,6 @@ dependencies {
     }
     testCompile 'junit:junit:4.12'
     compile'com.amazonaws:aws-android-sdk-polly:2.3.4'
+    compile 'com.amazonaws:aws-android-sdk-ddb:2.2'
+    compile 'com.amazonaws:aws-android-sdk-ddb-mapper:2.2.+'
 }

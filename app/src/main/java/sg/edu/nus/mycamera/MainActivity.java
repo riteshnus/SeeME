@@ -12,6 +12,7 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
@@ -23,7 +24,9 @@ import android.view.WindowManager;
 import android.widget.Toast;
 
 import com.amazonaws.auth.CognitoCachingCredentialsProvider;
+import com.amazonaws.mobileconnectors.dynamodbv2.dynamodbmapper.DynamoDBMapper;
 import com.amazonaws.regions.Regions;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
 import com.amazonaws.services.polly.AmazonPollyPresigningClient;
 import com.amazonaws.services.polly.model.OutputFormat;
 import com.amazonaws.services.polly.model.SynthesizeSpeechPresignRequest;
@@ -34,6 +37,8 @@ import java.io.InputStream;
 import java.net.URL;
 import java.util.Calendar;
 import java.util.List;
+
+import sg.edu.nus.mycamera.dto.SeeMeObjects;
 
 import static android.os.Environment.getExternalStorageDirectory;
 
@@ -52,7 +57,8 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
     private boolean permissionToRecordAccepted = false;
     private boolean permissionToWriteAccepted = false;
     private boolean permissionTORecordVideo = false;
-    private String [] permissions = {"android.permission.RECORD_AUDIO", "android.permission.WRITE_EXTERNAL_STORAGE","android.permission.CAMERA"};
+    private boolean permissionTOAccessFineLoacation = false;
+    private boolean permissionToAccessCoarseLocation=false;
     private String LOG_TAG = MainActivity.class.getName();
     private String textToRead;
     private MediaPlayer mediaPlayer;
@@ -60,7 +66,10 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
     private static final Regions MY_REGION = Regions.US_EAST_1;
     private AmazonPollyPresigningClient client;
     private CognitoCachingCredentialsProvider credentialsProvider;
+    private String android_id;
     private static final String COGNITO_POOL_ID = "us-east-1:7d6bf1bc-6f56-4ec5-8a36-7aaa48fec991";
+    private AmazonDynamoDBClient ddbClient;
+    private DynamoDBMapper mapper;
 
     static File saveDir = null;
     @Override
@@ -77,7 +86,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         recorder = new MediaRecorder();
         int requestCode = 200;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            requestPermissions(permissions, requestCode);
+            requestPermissions(Constant.permissions, requestCode);
         }
 
         setContentView(R.layout.activity_main);
@@ -86,8 +95,10 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         holder = cameraView.getHolder();
         holder.addCallback(this);
         holder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
-        initPollyClient();
+        initAmazonServices();
         setupNewMediaPlayer();
+        android_id = Settings.Secure.getString(this.getContentResolver(),
+                Settings.Secure.ANDROID_ID);
         //cameraView.setClickable(true);
         //cameraView.setOnClickListener(this);
 
@@ -233,6 +244,8 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
                 permissionToRecordAccepted  = grantResults[0] == PackageManager.PERMISSION_GRANTED;
                 permissionToWriteAccepted  = grantResults[1] == PackageManager.PERMISSION_GRANTED;
                 permissionTORecordVideo = grantResults[2] == PackageManager.PERMISSION_GRANTED;
+                permissionTOAccessFineLoacation = grantResults[3] == PackageManager.PERMISSION_GRANTED;
+                permissionToAccessCoarseLocation = grantResults[4] == PackageManager.PERMISSION_GRANTED;
                 break;
         }
         if (!permissionToRecordAccepted ) MainActivity.super.finish();
@@ -241,22 +254,9 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         if (!permissionTORecordVideo ){
             Log.e("Recorder ", "PermissionNotPresent");
             MainActivity.super.finish();}
+        if (!permissionTOAccessFineLoacation ) MainActivity.super.finish();
+        if (!permissionTOAccessFineLoacation ) MainActivity.super.finish();
     }
-
-/*    @Override
-    public void onInfo(MediaRecorder mr, int what, int extra) {
-        if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED) {
-            Log.v("VIDEOCAPTURE","Maximum Duration Reached");
-            recorder.stop();
-            recorder.reset();
-            recording = false;
-            initRecorder();
-            prepareRecorder();
-            recorder.start();
-            UploadCloud();
-        }
-        //Toast.makeText(MainActivity.this, "Again",Toast.LENGTH_LONG).show();
-    }*/
 
     public void UploadCloud(){
         String path0 = "video-api";
@@ -264,7 +264,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         asyncTaskRunner.execute(path0,mFileName);
     }
 
-    void initPollyClient() {
+    void initAmazonServices() {
         // Initialize the Amazon Cognito credentials provider.
         credentialsProvider = new CognitoCachingCredentialsProvider(
                 getApplicationContext(),
@@ -274,6 +274,8 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
 
         // Create a client that supports generation of presigned URLs.
         client = new AmazonPollyPresigningClient(credentialsProvider);
+        ddbClient = new AmazonDynamoDBClient(credentialsProvider);
+        mapper = new DynamoDBMapper(ddbClient);
     }
 
     private class AsyncTaskRunner extends AsyncTask<String, String, String> {
@@ -320,7 +322,9 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
 
         @Override
         protected void onPostExecute(String response) {
-            List<String> textsToRead = Utils.extractDataFromJSON(response);
+            SeeMeObjects seeMeeObject = Utils.createSeeMeObject(MainActivity.this,response);
+            seeMeeObject.setId(android_id);
+            List<String> textsToRead = seeMeeObject.getObjectDescription();
             if(!textsToRead.isEmpty()) {
                 StringBuffer buffer = new StringBuffer();
                 buffer.append("There is");
@@ -333,14 +337,14 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
             }
 
             Toast.makeText(MainActivity.this,textToRead,Toast.LENGTH_SHORT).show();
-            new PlaySpeech().execute();
+            new PlaySpeech().execute(seeMeeObject);
         }
     }
 
-    private class PlaySpeech extends AsyncTask<Void,Void,Void> {
+    private class PlaySpeech extends AsyncTask<SeeMeObjects,Void,Void> {
 
         @Override
-        protected Void doInBackground(Void... params) {
+        protected Void doInBackground(SeeMeObjects... params) {
             // Create speech synthesis request.
             SynthesizeSpeechPresignRequest synthesizeSpeechPresignRequest =
                     new SynthesizeSpeechPresignRequest()
@@ -354,6 +358,9 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
             // Get the presigned URL for synthesized speech audio stream.
             presignedSynthesizeSpeechUrl =
                     client.getPresignedSynthesizeSpeechUrl(synthesizeSpeechPresignRequest);
+            if(!params[0].getObjectDescription().isEmpty()) {
+                mapper.save(params[0]);
+            }
             return null;
         }
 
