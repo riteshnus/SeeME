@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Build;
+import android.support.v4.app.ActivityCompat;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -30,7 +31,7 @@ public class Utils {
         SeeMeObjects seeMeObject = new SeeMeObjects();
         Location location = getLocation(activity);
         String latitude = String.valueOf(location.getLatitude());
-        String  longitude = String.valueOf(location.getLongitude());
+       String  longitude = String.valueOf(location.getLongitude());
         seeMeObject.setLatitude(latitude);
         seeMeObject.setLongitude(longitude);
         List<String> descriptionList = new ArrayList<>();
@@ -46,18 +47,17 @@ public class Utils {
                 if (annotationArray.length() > 0) {
                     for (int i = 0; i < annotationArray.length(); i++) {
                         JSONObject annotationObject = annotationArray.getJSONObject(i);
-                        if(annotationObject.has("labelAnnotations")) {
-                            String videoUri = annotationObject.getString("inputUri");
-                            seeMeObject.setUrl(videoUri);
-                            JSONArray labelAnnotationArray = annotationObject.getJSONArray("labelAnnotations");
-                            if (labelAnnotationArray.length() > 0) {
-                                for (int j = 0; j < labelAnnotationArray.length(); j++) {
-                                    JSONObject labelObject = labelAnnotationArray.getJSONObject(j);
-                                    String description = labelObject.getString("description");
-                                    descriptionList.add(description);
-                                }
+                        String videoUri = annotationObject.getString("inputUri");
+                        seeMeObject.setUrl(videoUri);
+                        JSONArray labelAnnotationArray = annotationObject.getJSONArray("labelAnnotations");
+                        if (labelAnnotationArray.length() > 0) {
+                            for (int j = 0; j < labelAnnotationArray.length(); j++) {
+                                JSONObject labelObject = labelAnnotationArray.getJSONObject(j);
+                                String description = labelObject.getString("description");
+                                descriptionList.add(description);
                             }
                         }
+
                     }
                 }
             }
